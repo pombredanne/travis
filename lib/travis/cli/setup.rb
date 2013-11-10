@@ -3,13 +3,17 @@ require 'travis/cli'
 module Travis
   module CLI
     class Setup < RepoCommand
+      autoload :Appfog,       'travis/cli/setup/appfog'
       autoload :CloudControl, 'travis/cli/setup/cloud_control'
       autoload :CloudFoundry, 'travis/cli/setup/cloud_foundry'
       autoload :EngineYard,   'travis/cli/setup/engine_yard'
       autoload :Heroku,       'travis/cli/setup/heroku'
       autoload :Nodejitsu,    'travis/cli/setup/nodejitsu'
+      autoload :NPM,          'travis/cli/setup/npm'
       autoload :OpenShift,    'travis/cli/setup/open_shift'
+      autoload :PyPI,         'travis/cli/setup/pypi'
       autoload :RubyGems,     'travis/cli/setup/ruby_gems'
+      autoload :S3,           'travis/cli/setup/s3'
       autoload :SauceConnect, 'travis/cli/setup/sauce_connect'
       autoload :Service,      'travis/cli/setup/service'
 

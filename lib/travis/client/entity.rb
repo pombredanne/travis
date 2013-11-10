@@ -18,11 +18,15 @@ module Travis
       end
 
       def self.subclass_for(key)
-        MAP.fetch(key)
+        MAP.fetch(key.to_s)
       end
 
       def self.aka(*names)
         names.each { |n| MAP[n.to_s] = self }
+      end
+
+      def self.weak?
+        false
       end
 
       def self.one(key = nil)
@@ -73,10 +77,22 @@ module Travis
         Integer(id)
       end
 
+      def self.id?(object)
+        object.is_a? Integer
+      end
+
+      def self.id_field(key = nil)
+        @id_field = key.to_s if key
+        @id_field || superclass.id_field
+      end
+
+      id_field :id
+
       def initialize(session, id)
+        raise Travis::Client::Error, '%p is not a valid id' % id unless self.class.id? id
         @attributes = {}
         @session    = session
-        @id         = self.class.cast_id(id)
+        @id         = self.class.cast_id(id) if id
       end
 
       def update_attributes(data)

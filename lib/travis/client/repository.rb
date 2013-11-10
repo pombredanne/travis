@@ -55,7 +55,7 @@ module Travis
 
       one  :repo
       many :repos
-      aka  :repository, :permissions
+      aka  :repository, :permissions, :admin, :pull, :push
 
       def public_key
         attributes["public_key"] ||= begin
@@ -118,7 +118,11 @@ module Travis
       end
 
       def branch(name)
-        last_on_branch.detect { |b| b.commit.branch == name.to_s }
+        attributes['branches']       ||= {}
+        attributes['branches'][name] ||= begin
+          build = attributes['last_on_branch'].detect { |b| b.commit.branch == name.to_s } if attributes['last_on_branch']
+          build || session.get("/repos/#{id}/branches/#{name}")['branch']
+        end
       end
 
       def each_build(params = nil, &block)
@@ -134,8 +138,8 @@ module Travis
       end
 
       def job(number)
-        build_number = number.to_s[/^\d+/]
-        build        = build(build_number)
+        build_number = number.to_s[/^\d+/] or return nil
+        build        = build(build_number) or return nil
         job          = build.jobs.detect { |j| j.number == number } if number != build_number
         job        ||= build.jobs.first if build and build.jobs.size == 1
         job
@@ -160,6 +164,26 @@ module Travis
         else
           ["common"]
         end
+      end
+
+      def member?
+        session.user.repositories.include? self
+      end
+
+      def owner_name
+        slug[/^[^\/]+/]
+      end
+
+      def owner
+        session.account(owner_name)
+      end
+
+      def caches(params = {})
+        session.get("/repos/#{id}/caches", params)['caches']
+      end
+
+      def delete_caches(params = {})
+        session.delete("/repos/#{id}/caches", params)['caches']
       end
 
       private

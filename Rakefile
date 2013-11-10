@@ -40,16 +40,13 @@ task :update => :completion do
   readme = File.read('README.md').b
   readme.gsub! /^(\s+\$ travis version\n\s+).*$/, "\\1#{Travis::VERSION}"
   readme.gsub! /(gem install travis -v )\S+/, "\\1#{Travis::VERSION}"
+  readme.gsub! /^\*\*#{Regexp.escape(Travis::VERSION)}\*\* \(not yet released?\)\n/i, "**#{Travis::VERSION}** (#{Time.now.strftime("%B %-d, %Y")})\n"
   File.write('README.md', readme)
 end
 
 task :completion do
-  require 'travis/cli'
-  require 'erb'
-  commands = Travis::CLI.commands.sort_by { |c| c.command_name }
-  template = File.read('completion/travis.sh.erb')
-  source   = ERB.new(template).result(binding).gsub(/^ +\n/, '')
-  File.write('completion/travis.sh', source)
+  require 'travis/tools/completion'
+  Travis::Tools::Completion.compile
 end
 
 task 'travis.gemspec' => :update

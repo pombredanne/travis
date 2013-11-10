@@ -1,6 +1,8 @@
 require 'travis/cli'
 require 'travis/tools/system'
 require 'travis/tools/formatter'
+require 'travis/tools/assets'
+require 'travis/tools/completion'
 require 'travis/version'
 
 require 'highline'
@@ -11,11 +13,11 @@ require 'timeout'
 module Travis
   module CLI
     class Command
-      extend Parser
-      extend Forwardable
+      include Tools::Assets
+      extend Parser, Forwardable, Tools::Assets
       def_delegators :terminal, :agree, :ask, :choose
 
-      HighLine.use_color = !Tools::System.windows? && $stdout.tty?
+      HighLine.use_color = Tools::System.unix? && $stdout.tty?
       HighLine.color_scheme = HighLine::ColorScheme.new do |cs|
         cs[:command]   = [ :bold             ]
         cs[:error]     = [ :red              ]
@@ -31,12 +33,13 @@ module Travis
       end
 
       on('-i', '--[no-]interactive', "be interactive and colorful") do |c, v|
-        HighLine.use_color = v unless Tools::System.windows?
+        HighLine.use_color = v if Tools::System.unix?
         c.force_interactive = v
       end
 
       on('-E', '--[no-]explode', "don't rescue exceptions")
       on('--skip-version-check', "don't check if travis client is up to date")
+      on('--skip-completion-check', "don't check if auto-completion is set up")
 
       def self.command_name
         name[/[^:]*$/].downcase
@@ -51,8 +54,8 @@ module Travis
         @@abstract << self
       end
 
-      def self.skip(name)
-        define_method(name) {}
+      def self.skip(*names)
+        names.each { |n| define_method(n) {} }
       end
 
       def self.description(description = nil)
@@ -60,8 +63,9 @@ module Travis
         @description ||= ""
       end
 
-      attr_accessor :arguments, :config, :force_interactive, :formatter
+      attr_accessor :arguments, :config, :force_interactive, :formatter, :debug
       attr_reader :input, :output
+      alias_method :debug?, :debug
 
       def initialize(options = {})
         @on_signal  = []
@@ -130,6 +134,23 @@ module Travis
       rescue Timeout::Error, Faraday::Error::ClientError
       end
 
+      def check_completion
+        return if skip_completion_check? or !interactive?
+
+        if config['checked_completion']
+          Tools::Completion.update_completion if config['completion_version'] != Travis::VERSION
+        else
+          write_to($stderr) do
+            next Tools::Completion.update_completion if Tools::Completion.completion_installed?
+            next unless agree('Shell completion not installed. Would you like to like to install it now? ') { |q| q.default = "y" }
+            Tools::Completion.install_completion
+          end
+        end
+
+        config['checked_completion'] = true
+        config['completion_version'] = Travis::VERSION
+      end
+
       def check_ruby
         return if RUBY_VERSION > '1.9.2' or skip_version_check?
         warn "Your Ruby version is outdated, please consider upgrading, as we will drop support for #{RUBY_VERSION} soon!"
@@ -141,14 +162,18 @@ module Travis
         check_arity(method(:run), *arguments)
         load_config
         check_version
+        check_completion
         setup
         run(*arguments)
+        clear_error
         store_config
       rescue StandardError => e
         raise(e) if explode?
         message = e.message
-        message += " - need to run `travis login` again?" if Travis::Client::Error === e and message == 'access denied'
-        error message
+        message += " - try running #{command("login#{endpoint_option}")}" if Travis::Client::Error === e and message == 'access denied'
+        message += color("\nfor a full error report, run #{command("report#{endpoint_option}")}", :error) if interactive?
+        store_error(e)
+        error(message)
       end
 
       def command_name
@@ -181,9 +206,19 @@ module Travis
       end
 
       def debug(line)
+        return unless debug?
         write_to($stderr) do
           say color("** #{line}", :debug)
         end
+      end
+
+      def time(info, callback = Proc.new)
+        return callback.call unless debug?
+        start = Time.now
+        debug(info)
+        callback.call
+        duration = Time.now - start
+        debug("  took %.2g seconds" % duration)
       end
 
       def info(line)
@@ -197,6 +232,16 @@ module Travis
       end
 
       private
+
+        def store_error(exception)
+          message = "An error occurred running `travis %s%s`:\n    %p: %s\n" % [command_name, endpoint_option, exception.class, exception.message]
+          exception.backtrace.each { |l| message << "        from #{l}\n" }
+          save_file("error.log", message)
+        end
+
+        def clear_error
+          delete_file("error.log")
+        end
 
         def setup_trap
           [:INT, :TERM].each do |signal|
@@ -246,35 +291,44 @@ module Travis
         end
 
         def command(name)
-          color("#$0 #{name}", :command)
+          color("#{File.basename($0)} #{name}", :command)
         end
 
         def success(line)
           say color(line, :success) if interactive?
         end
 
-        def asset_path(name)
+        def config_path(name)
           path = ENV.fetch('TRAVIS_CONFIG_PATH') { File.expand_path('.travis', Dir.home) }
           Dir.mkdir(path, 0700) unless File.directory? path
           File.join(path, name)
         end
 
-        def load_asset(name, default = nil)
-          path = asset_path(name)
-          File.exist?(path) ? File.read(path) : default
+        def load_file(name, default = nil)
+          return default unless path = config_path(name) and File.exist? path
+          debug "Loading %p" % path
+          File.read(path)
         end
 
-        def save_asset(name, content)
-          File.write(asset_path(name), content.to_s)
+        def delete_file(name)
+          return unless path = config_path(name) and File.exist? path
+          debug "Deleting %p" % path
+          File.delete(path)
+        end
+
+        def save_file(name, content)
+          path = config_path(name)
+          debug "Storing %p" % path
+          File.write(path, content.to_s)
         end
 
         def load_config
-          @config = YAML.load load_asset('config.yml', '{}')
+          @config = YAML.load load_file('config.yml', '{}')
           @original_config = @config.dup
         end
 
         def store_config
-          save_asset('config.yml', @config.to_yaml)
+          save_file('config.yml', @config.to_yaml)
         end
 
         def check_arity(method, *args)
@@ -286,10 +340,18 @@ module Travis
           wrong_args("many") if args.any?
         end
 
+        def danger_zone?(message)
+          agree(color("DANGER ZONE: ", [:red, :bold]) << message << " ") { |q| q.default = "no" }
+        end
+
         def wrong_args(quantity)
           error "too #{quantity} arguments" do
             say help
           end
+        end
+
+        def endpoint_option
+          ""
         end
     end
   end

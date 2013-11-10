@@ -16,6 +16,10 @@ module Travis
         c.setup_notification(type)
       end
 
+      on('-b', '--builds', 'only monitor builds, not jobs')
+      on('-p', '--push', 'monitor push events')
+      on('-P', '--pull', 'monitor pull request events')
+
       attr_reader :repos, :notification
 
       def initialize(*)
@@ -27,7 +31,8 @@ module Travis
         super
         repos.map! { |r| repo(r) }
         repos.concat(user.repositories) if my_repos?
-        setup_notification(repos.any? || :dummy) unless notification
+        setup_notification(!firehose? || :dummy) unless notification
+        debug "Using notifications: #{notification.class.name[/[^:]+$/]}"
       end
 
       def setup_notification(type = nil)
@@ -53,19 +58,46 @@ module Travis
         end
       end
 
+      def events
+        events = %w[build:started build:finished]
+        events << 'job:started' << 'job:finished' unless builds?
+        events
+      end
+
+      def firehose?
+        org? and repos.empty?
+      end
+
+      def all?
+        !pull? and !push?
+      end
+
+      def monitor?(entity)
+        return true if all?
+        entity.pull_request? ? pull? : push?
+      end
+
+      def display(entity, time)
+        say [
+          color(formatter.time(time), entity.color),
+          color(entity.inspect_info, [entity.color, :bold]),
+          color(entity.state, entity.color)
+        ].join(" ")
+        notification.notify(entity.repository.slug, "#{entity.class.name[/[^:]+$/]} ##{entity.number} #{entity.state}")
+      end
+
+      def handle_event(event)
+        entity = event.job          || event.build
+        time   = entity.finished_at || entity.started_at
+        display(entity, time) if monitor? entity
+      rescue Travis::Client::Error => error
+        raise error if explode?
+      end
+
       def run
         listen(*repos) do |listener|
-          listener.on_connect { say description, 'Monitoring %s:' }
-          listener.on 'build:started', 'job:started', 'build:finished', 'job:finished' do |event|
-            entity = event.job          || event.build
-            time   = entity.finished_at || entity.started_at
-            say [
-              color(formatter.time(time), entity.color),
-              color(entity.inspect_info, [entity.color, :bold]),
-              color(entity.state, entity.color)
-            ].join(" ")
-            notification.notify("Travis CI", "#{entity.inspect_info} #{entity.state}")
-          end
+          listener.on_connect { say description, "Monitoring #{"builds for " if builds?}%s:" }
+          listener.on(*events) { |e| handle_event(e) }
         end
       end
     end

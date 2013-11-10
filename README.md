@@ -17,12 +17,14 @@ The [travis gem](https://rubygems.org/gems/travis) includes both a [command line
         * [`login`](#login)
         * [`monitor`](#monitor)
         * [`raw`](#raw)
+        * [`report`](#report)
         * [`sync`](#sync)
         * [`token`](#token)
         * [`whatsup`](#whatsup)
         * [`whoami`](#whoami)
     * [Repository Commands](#repository-commands)
         * [`branches`](#branches)
+        * [`cache`](#cache)
         * [`cancel`](#cancel)
         * [`disable`](#disable)
         * [`enable`](#enable)
@@ -36,7 +38,9 @@ The [travis gem](https://rubygems.org/gems/travis) includes both a [command line
         * [`setup`](#setup)
         * [`show`](#show)
         * [`status`](#status)
+    * [Pro and Enterprise](#pro-and-enterprise)
     * [Environment Variables](#environment-variables)
+    * [Desktop Notifications](#desktop-notifications)
 * [Ruby Library](#ruby-library)
     * [Authentication](#authentication)
     * [Using Pro](#using-pro)
@@ -48,7 +52,6 @@ The [travis gem](https://rubygems.org/gems/travis) includes both a [command line
         * [Artifacts](#artifacts)
         * [Users](#users)
         * [Commits](#commits)
-        * [Workers](#workers)
     * [Listening for Events](#listening-for-events)
     * [Dealing with Sessions](#dealing-with-sessions)
     * [Using Namespaces](#using-namespaces)
@@ -109,8 +112,6 @@ Additionally, every API command understands the following options:
     -t, --token [ACCESS_TOKEN]       access token to use
         --debug                      show API requests
         --adapter ADAPTER            Faraday adapter to use for HTTP requests
-
-By default, [General API Commands](#general-api-commands) will talk to [api.travis-ci.org](https://api.travis-ci.org). You can change this by supplying `--pro` for [api.travis-ci.com](https://api.travis-ci.com) or `--api-endpoint` with your own endpoint. Note that all [Repository Commands](#repository-commands) will try to figure out the API endpoint to talk to automatically depending on the project's visibility on GitHub.
 
 You can supply an access token via `--token` if you want to make an authenticated call. If you don't have an access token stored for the API endpoint, it will remember it for subsequent requests. Keep in mind, this is not the "Travis token" used when setting up GitHub hooks (due to security). You probably don't have an access token handy right now. Don't worry, usually you won't use this option but instead just do a [`travis login`](#login).
 
@@ -193,6 +194,13 @@ If you don't want it to send your credentials to GitHub, you can create a GitHub
 
 A third option is for the really lazy: `--auto`. In this mode the client will try to find a GitHub token for you and just use that. This will only work if you have a [global GitHub token](https://help.github.com/articles/git-over-https-using-oauth-token) stored in your [.netrc](http://blogdown.io/c4d42f87-80dd-45d5-8927-4299cbdf261c/posts/574baa68-f663-4dcf-88b9-9d41310baf2f). If you haven't heard of this, it's worth looking into in general. Again: Travis CI will not store that token.
 
+#### `logout`
+
+This command makes Travis CI forget your access token.
+
+    $ travis logout --pro
+    Successfully logged out!
+
 #### `monitor`
 
     Usage: travis monitor [options]
@@ -205,9 +213,13 @@ A third option is for the really lazy: `--auto`. In this mode the client will tr
             --org                        short-cut for --api-endpoint 'https://api.travis-ci.org/'
         -t, --token [ACCESS_TOKEN]       access token to use
             --debug                      show API requests
+        -X, --enterprise [NAME]          use enterprise setup (optionally takes name for multiple setups)
         -m, --my-repos                   Only monitor my own repositories
         -r, --repo SLUG                  monitor given repository (can be used more than once)
         -n, --[no-]notify [TYPE]         send out desktop notifications (optional type: osx, growl, libnotify)
+        -b, --builds                     only monitor builds, not jobs
+        -p, --push                       monitor push events
+        -P, --pull                       monitor pull request events
 
 With `monitor` you can watch a live stream of what's going on:
 
@@ -221,9 +233,19 @@ With `monitor` you can watch a live stream of what's going on:
 
 You can limit the repositories to monitor with `--my-repos` and `--repo SLUG`.
 
-The monitor command can also send out desktop notifications (OSX, Growl or libnotify):
+By default, you will receive events for both builds and jobs, you can limit it to builds only via `--build` (short `-b`):
 
-    $ travis montior --pro -n
+    $ travis monitor
+    Monitoring travis-ci.org:
+    2013-08-05 01:22:40 questmaster/FATpRemote#45 started
+    2013-08-05 01:22:42 plataformatec/simple_form#666 passed
+    ...
+
+Similarly, you can limit it to builds/jobs for pull requests via `--pull` and for normal pushes via `--push`.
+
+The monitor command can also send out [desktop notifications](#desktop-notifications):
+
+    $ travis monitor --pro -n
     Monitoring travis-ci.com:
     ...
 
@@ -248,7 +270,44 @@ This is really helpful both when working on this client and when exploring the [
 
 Use `--json` if you'd rather prefer the output to be JSON.
 
-### `sync`
+#### `report`
+
+When inspecting a bug or reporting an issue, it can be handy to include a report about the system and configuration used for running a command.
+
+    $ travis report --pro
+    System
+    Ruby:                     Ruby 2.0.0-p195
+    Operating System:         Mac OS X 10.8.5
+    RubyGems:                 RubyGems 2.0.7
+
+    CLI
+    Version:                  1.5.8
+    Plugins:                  "travis-as-user", "travis-build", "travis-cli-pr"
+    Auto-Completion:          yes
+    Last Version Check:       2013-11-02 16:25:03 +0100
+
+    Session
+    API Endpoint:             https://api.travis-ci.com/
+    Logged In:                as "rkh"
+    Verify SSL:               yes
+    Enterprise:               no
+
+    Endpoints
+    pro:                      https://api.travis-ci.com/ (access token, current)
+    org:                      https://api.travis-ci.org/ (access token)
+
+    Last Exception
+    An error occurred running `travis whoami --pro`:
+        Travis::Client::Error: access denied
+            from ...
+
+
+    For issues with the command line tool, please visit https://github.com/travis-ci/travis/issues.
+    For Travis CI in general, go to https://github.com/travis-ci/travis-ci/issues or email support@travis-ci.com.
+
+This command can also list all known repos and the endpoint to use for them via the `--known-repos` option.
+
+#### `sync`
 
     Usage: travis sync [options]
         -h, --help                       Display help
@@ -331,12 +390,16 @@ Again, like most other commands, goes well with shell scripting:
     -h, --help                       Display help
     -i, --[no-]interactive           be interactive and colorful
     -E, --[no-]explode               don't rescue exceptions
+        --skip-version-check         don't check if travis client is up to date
+        --skip-completion-check      don't check if auto-completion is set up
     -e, --api-endpoint URL           Travis API server to talk to
+    -I, --[no-]insecure              do not verify SSL certificate of API endpoint
         --pro                        short-cut for --api-endpoint 'https://api.travis-ci.com/'
         --org                        short-cut for --api-endpoint 'https://api.travis-ci.org/'
     -t, --token [ACCESS_TOKEN]       access token to use
         --debug                      show API requests
-    -r, --repo SLUG
+    -X, --enterprise [NAME]          use enterprise setup (optionally takes name for multiple setups)
+    -r, --repo SLUG                  repository to use (will try to detect from current git clone)
 
 Repository commands have all the options [General API Commands](#general-api-commands) have.
 
@@ -360,6 +423,68 @@ Displays the most recent build for each branch:
     master:                                    #163  passed     add Repository#branches and Repository#branch(name)
 
 For more fine grained control and older builds on a specific branch, see [`history`](#history).
+
+#### `cache`
+
+    Lists or deletes repository caches.
+    Usage: travis cache [options]
+        -h, --help                       Display help
+        -i, --[no-]interactive           be interactive and colorful
+        -E, --[no-]explode               don't rescue exceptions
+            --skip-version-check         don't check if travis client is up to date
+            --skip-completion-check      don't check if auto-completion is set up
+        -e, --api-endpoint URL           Travis API server to talk to
+        -I, --[no-]insecure              do not verify SSL certificate of API endpoint
+            --pro                        short-cut for --api-endpoint 'https://api.travis-ci.com/'
+            --org                        short-cut for --api-endpoint 'https://api.travis-ci.org/'
+        -t, --token [ACCESS_TOKEN]       access token to use
+            --debug                      show API requests
+        -X, --enterprise [NAME]          use enterprise setup (optionally takes name for multiple setups)
+        -r, --repo SLUG                  repository to use (will try to detect from current git clone)
+        -d, --delete                     delete listed caches
+        -b, --branch BRANCH              only list/delete caches on given branch
+        -m, --match STRING               only list/delete caches where slug matches given string
+        -f, --force                      do not ask user to confirm deleting the caches
+
+Lists or deletes [directory caches](http://about.travis-ci.org/docs/user/caching/) for a repository:
+
+    $ travis cache
+    On branch master:
+    cache--rvm-2.0.0--gemfile-Gemfile      last modified: 2013-11-04 13:45:44  size: 62.21 MiB
+    cache--rvm-ruby-head--gemfile-Gemfile  last modified: 2013-11-04 13:46:55  size: 62.65 MiB
+
+    On branch example:
+    cache--rvm-2.0.0--gemfile-Gemfile      last modified: 2013-11-04 13:45:44  size: 62.21 MiB
+
+    Overall size of above caches: 187.07 MiB
+
+You can filter by branch:
+
+    $ travis cache --branch master
+    On branch master:
+    cache--rvm-2.0.0--gemfile-Gemfile      last modified: 2013-11-04 13:45:44  size: 62.21 MiB
+    cache--rvm-ruby-head--gemfile-Gemfile  last modified: 2013-11-04 13:46:55  size: 62.65 MiB
+
+    Overall size of above caches: 124.86 MiB
+
+And by matching against the slug:
+
+    $ travis cache --match 2.0.0
+    On branch master:
+    cache--rvm-2.0.0--gemfile-Gemfile  last modified: 2013-11-04 13:45:44  size: 62.21 MiB
+
+    Overall size of above caches: 62.21 MiB
+
+You can also use this command to delete caches:
+
+    $ travis cache -b example -m 2.0.0 --delete
+    DANGER ZONE: Do you really want to delete all caches on branch example that match 2.0.0? |no| yes
+    Deleted the following caches:
+
+    On branch example:
+    cache--rvm-2.0.0--gemfile-Gemfile  last modified: 2013-11-04 13:45:44  size: 62.21 MiB
+    
+    Overall size of above caches: 62.21 MiB
 
 #### `cancel`
 
@@ -403,7 +528,7 @@ If you don't want the sync to be triggered, use `--skip-sync`.
 
 #### `encrypt`
 
-    Usage: bin/travis encrypt [args..] [options]
+    Usage: travis encrypt [args..] [options]
         -h, --help                       Display help
         -i, --[no-]interactive           be interactive and colorful
         -E, --[no-]explode               don't rescue exceptions
@@ -565,20 +690,43 @@ You can also set certain values via command line flags (see list above):
 
 #### `logs`
 
-Given a job number, logs simply prints out that job's logs.
+Given a job number, logs simply prints out that job's logs. By default it will display the first job of the latest build.
 
-    $ travis logs 77.1
+    $ travis logs
+    displaying logs for travis-ci/travis#317.1
     [... more logs ...]
     Your bundle is complete! Use `bundle show [gemname]` to see where a bundled gem is installed.
     $ bundle exec rake
     /home/travis/.rvm/rubies/ruby-1.8.7-p371/bin/ruby -S rspec spec -c
-    Faraday: you may want to install system_timer for reliable timeouts
-    ...................................................................................................................................................................
+    ..............................................................................................................................................................................................................................................................................
 
-    Finished in 6.48 seconds
-    163 examples, 0 failures
+    Finished in 4.46 seconds
+    270 examples, 0 failures
 
     Done. Build script exited with: 0
+
+The info line about the job being displayed is written to stderr, the logs itself are written to stdout.
+
+It takes an optional argument that can be a job number:
+
+    $ travis logs 100.3
+    displaying logs for travis-ci/travis#100.3
+
+A build number (in which case it will pick the build's first job):
+
+    $ travis logs 100
+    displaying logs for travis-ci/travis#100.1
+
+Just the job suffix, which will pick the corresponding job from the latest build:
+
+    $ travis logs .2
+    displaying logs for travis-ci/travis#317.2
+
+A branch name:
+
+    $ travis logs ghe
+    displaying logs for travis-ci/travis#270.1
+
 
 #### `open`
 
@@ -633,7 +781,7 @@ Or a single job:
 
 Helps you configure Travis addons.
 
-    Usage: bin/travis setup service [options]
+    Usage: travis setup service [options]
         -h, --help                       Display help
         -i, --[no-]interactive           be interactive and colorful
         -E, --[no-]explode               don't rescue exceptions
@@ -647,7 +795,7 @@ Helps you configure Travis addons.
         -r, --repo SLUG                  repository to use (will try to detect from current git clone)
         -f, --force                      override config section if it already exists
 
-Available services: `cloudcontrol`, `cloudfoundry`, `engineyard`, `heroku`, `nodejitsu`, `openshift`, `rubygems` and `sauce_connect`.
+Available services: `appfog`, `cloudcontrol`, `cloudfoundry`, `engineyard`, `heroku`, `nodejitsu`, `npm`, `openshift`, `pypi`, `rubygems`, `s3` and `sauce_connect`.
 
 Example:
 
@@ -745,6 +893,30 @@ Outputs a one line status message about the project's last build. With `-q` that
 
     $ travis status -qpx && cap deploy
 
+### Pro and Enterprise
+
+By default, [General API Commands](#general-api-commands) will talk to [api.travis-ci.org](https://api.travis-ci.org). You can change this by supplying `--pro` for [api.travis-ci.com](https://api.travis-ci.com) or `--api-endpoint` with your own endpoint. Note that all [Repository Commands](#repository-commands) will try to figure out the API endpoint to talk to automatically depending on the project's visibility on GitHub.
+
+    $ travis login --pro
+    ...
+    $ travis monitor --pro -m
+    ...
+
+The custom `--api-endpoint` option is handy for local development:
+
+    $ travis whatsup --api-endpoint http://localhost:3000
+    ...
+
+If you have a Travis Enterprise setup in house, you can use the `--enterprise` option (or short `-X`). It will ask you for the enterprise domain the first time it is used.
+
+    $ travis login -X
+    Enterprise domain: travisci.example.com
+    ...
+    $ travis whatsup -X
+    ...
+
+Note that currently [Repository Commands](#repository-commands) will not be able to detect Travis Enterprise automatically. You will have to use the `-X` flag at least once per repository. The command line tool will remember the API endpoint for subsequent commands issued against the same repository.
+
 ### Environment Variables
 
 You can set the following environment variables to influence the travis behavior:
@@ -752,6 +924,14 @@ You can set the following environment variables to influence the travis behavior
 * `$TRAVIS_TOKEN` - access token to use when the `--token` flag is not user
 * `$TRAVIS_ENDPOINT` - API endpoint to use when the `--api-endpoint`, `--org` or `--pro` flag is not used
 * `$TRAVIS_CONFIG_PATH` - directory to store configuration in (defaults to ~/.travis)
+
+### Desktop Notifications
+
+Some commands support sending desktop notifications. The following notification systems are currently supported:
+
+* **Notification Center** - requires Mac OSX 10.8 or later and [Notification Center](http://support.apple.com/kb/ht5362) must be running under the system executing the `travis` command.
+* **Growl** - [growlnotify](http://growl.info/downloads#generaldownloads) has to be installed and [Growl](https://itunes.apple.com/us/app/growl/id467939042?mt=12&ign-mpt=uo%3D4) needs to be running. Does currently not support the Windows version of Growl.
+* **libnotify** - needs [libnotify](http://www.linuxfromscratch.org/blfs/view/svn/x/libnotify.html) installed, including the `notify-send` executable.
 
 ## Ruby Library
 
@@ -897,6 +1077,9 @@ Travis::Repository.find('rails/rails')            # find by slug
 Travis::Repository.find(891)                      # find by id
 Travis::Repository.find_all(owner_name: 'rails')  # all repos in the rails organization
 Travis::Repository.current                        # repos that see some action right now
+
+# all repos with the same owner as the repo with id 891
+Travis::Repository.find(891).owner.repositories
 ```
 
 Once you have a repository, you can for instance encrypt some strings with its private key:
@@ -1061,17 +1244,26 @@ commit = repo.last_build.commit
 puts "Last tested commit: #{commit.short_sha} on #{commit.branch} by #{commit.author_name} - #{commit.subject}"
 ```
 
-#### Workers
+#### Caches
 
-If a worker is running something, it will reference a `job` and a `repository`. Otherwise the values will be `nil`.
+Caches can be fetched for a repository.
 
 ``` ruby
-require 'travis'
-workers = Travis::Worker.find_all
+require 'travis/pro'
 
-workers.each do |worker|
-  puts "#{worker.name}: #{worker.host} - #{worker.state} - #{worker.repository.slug if worker.repository}"
+Travis::Pro.access_token = "MY SECRET TOKEN"
+repo = Travis::Pro::Repository.find("my/rep")
+
+repo.caches.each do |cache|
+  puts "#{cache.branch}: #{cache.size}"
+  cache.delete
 end
+```
+
+It is also possible to delete multiple caches with a single API call:
+
+``` ruby
+repo.delete_caches(branch: "master", match: "rbx")
 ```
 
 ### Dealing with Sessions
@@ -1186,12 +1378,20 @@ You can check your Ruby version by running `ruby -v`:
 
 Then run:
 
-    $ gem install travis -v 1.5.4 --no-rdoc --no-ri
+    $ gem install travis -v 1.6.2 --no-rdoc --no-ri
 
 Now make sure everything is working:
 
     $ travis version
-    1.5.4
+    1.6.2
+
+### Development Version
+
+You can also install the development version via RubyGems:
+
+    $ gem install --pre
+
+We automatically publish a new development version after every successful build.
 
 ### Updating your Ruby
 
@@ -1237,6 +1437,84 @@ You can of course always compile Ruby from source, though then you are left with
 If you have the old `travis-cli` gem installed, you should `gem uninstall travis-cli`, just to be sure, as it ships with an executable that is also named `travis`.
 
 ## Version History
+
+**1.6.3** (not yet released)
+
+* Check if Notification Center or Growl is actually running before sending out notifications.
+* Better documentation for desktop notifications.
+
+**1.6.2** (November 8, 2013)
+
+* Remove worker support, as API endpoints have been removed from Travis CI.
+* Improve OS detection.
+* Fix `travis report`.
+* Fix issues with new payload for permissions endpoint (used by `travis monitor`).
+* Improve default logic for whether `travis monitor` should display desktop notifications.
+* Make desktop notifications work on Mac OSX 10.9.
+* Increase and improve debug output.
+* Only load pry if console command is actually invoked, not when it is loaded (for instance by `travis help`).
+
+**1.6.1** (November 4, 2013)
+
+* Update autocompletion when updating travis gem.
+
+**1.6.0** (November 4, 2013)
+
+* Add `travis cache` to list and delete directory caches.
+* Add `travis report` to give a report of the system, endpoint, configuration and last exception.
+* Add `Cache` entity.
+* Keep `travis monitor` running on API errors.
+
+**1.5.8** (October 24, 2013)
+
+* Fix bug in completion code that stopped command line client from running.
+
+**1.5.7** (October 24, 2013)
+
+* Improve logic for automatically figuring out a repository slug based on the tracked git remote.
+* Display error if argument passed to `-r` is not a full slug.
+* Do not automatically install shell completion on gem installation.
+* Add Travis CI mascot as logo to desktop notifications.
+* Improve OSX and Growl notifications.
+* Require user to be logged in for all commands issued against an enterprise installation.
+* Improve error message when not logged in for enterprise installations.
+* Fix API endpoint detection for enterprise installations.
+* Make streaming API, and thus the `monitor` and `logs` command, work with enterprise installations.
+* Add `--build`, `--push` and `--pull` flags to monitor command to allow filtering events.
+
+**1.5.6** (October 22, 2013)
+
+* Add `travis setup appfog` and `travis setup s3`.
+* Use new API for fetching a single branch for Repository#branch. This also circumvents the 25 branches limit.
+* Start publishing gem prereleases after successful builds.
+* Have `travis logs` display first job for a build if a build number is given (or for the last build if called without arguments)
+* Add support for branch names to `travis logs`.
+* Add support for just using the job suffix with `travis logs`.
+* Improve error message if job cannot be found/identified by `travis logs`.
+* Add `travis logout` for removing access token.
+* Improve error message for commands that require user to be logged in.
+* Add `account` method for fetching a single account to `Travis::Client::Methods`.
+* Allow creating account objects for any account, not just these the user is part of. Add `Account#member?` to check for membership.
+* Add `Account#repositories` to load all repos for a given account.
+* Add `Repository#owner_name` and `Repository#owner` to load the account owning a repository.
+* Add `Repository#member?` to check if the current user is a member of a repository.
+* Add `Build#pull_request_number` and `Build#pull_request_title`.
+* Remove trailing new lines from string passed to `travis encrypt`.
+* Fix double `provider` entry generated by `travis setup engineyard`.
+* Only load auto-completions if available.
+* Fix and improve growl notifications.
+* Fix GitHub host detection `travis login --auto`.
+* API endpoint may now include a path all the requests will be prefixed with.
+* Allow overriding SSL options in Ruby client.
+* Add `--insecure` to turn off SSL verification.
+* Add `--enterprise`/`-X` option for Travis Enterprise integration.
+
+**1.5.5** (October 2, 2013)
+
+* Add `travis setup pypi`
+* Add `travis setup npm`
+* When loading accounts, set all flag to true.
+* Fix bug where session.config would be nil instead of a hash.
 
 **1.5.4** (September 7, 2013)
 
@@ -1370,7 +1648,7 @@ If you have the old `travis-cli` gem installed, you should `gem uninstall travis
 
 **v1.1.3** (January 26, 2013)
 
-* use persistent HTTP connections (performance for commands with multiple api requests)
+* use persistent HTTP connections (performance for commands with example api requests)
 * include round trip time in debug output
 
 **v1.1.2** (January 24, 2013)

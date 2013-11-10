@@ -37,14 +37,6 @@ module Travis
         session.find_one(Repository, id_or_slug)
       end
 
-      def worker(id)
-        session.find_one(Worker, id)
-      end
-
-      def workers(params = {})
-        session.find_many(Worker, params)
-      end
-
       def build(id)
         session.find_one(Build, id)
       end
@@ -61,10 +53,16 @@ module Travis
 
       def user
         session.find_one(User)
+      rescue NotFound
+        raise NotLoggedIn, 'currently not logged in'
+      end
+
+      def account(name)
+        session.find_one(Account, name)
       end
 
       def accounts
-        session.find_many(Account)
+        session.find_many(Account, :all => true)
       end
 
       def broadcasts

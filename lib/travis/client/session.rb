@@ -4,6 +4,7 @@ require 'travis/version'
 require 'faraday'
 require 'faraday_middleware'
 require 'travis/tools/system'
+require 'travis/tools/assets'
 
 begin
   require 'typhoeus/adapters/faraday' unless Travis::Tools::System.windows?
@@ -15,9 +16,10 @@ require 'json'
 module Travis
   module Client
     class Session
-      SSL_OPTIONS = { :ca_file => File.expand_path("../../cacert.pem", __FILE__) }
+      SSL_OPTIONS = { :ca_file => Tools::Assets['cacert.pem'] }
+
       include Methods
-      attr_reader :connection, :headers, :access_token, :instruments, :faraday_adapter, :agent_info
+      attr_reader :connection, :headers, :access_token, :instruments, :faraday_adapter, :agent_info, :ssl
 
       def initialize(options = Travis::Client::ORG_URI)
         @headers         = {}
@@ -26,6 +28,7 @@ module Travis
         @agent_info      = []
         @config          = nil
         @faraday_adapter = defined?(Typhoeus) ? :typhoeus : :net_http
+        @ssl             = SSL_OPTIONS
 
         options = { :uri => options } unless options.respond_to? :each_pair
         options.each_pair { |key, value| public_send("#{key}=", value) }
@@ -44,9 +47,14 @@ module Travis
         set_user_agent
       end
 
+      def ssl=(options)
+        @ssl     = options.dup.freeze
+        self.uri = uri if uri
+      end
+
       def uri=(uri)
         clear_cache!
-        self.connection = Faraday.new(:url => uri, :ssl => SSL_OPTIONS) do |faraday|
+        self.connection = Faraday.new(:url => uri, :ssl => ssl) do |faraday|
           faraday.request  :url_encoded
           faraday.response :json
           faraday.response :follow_redirects
@@ -83,18 +91,18 @@ module Travis
       end
 
       def find_one(entity, id = nil)
-        raise Travis::Error, "cannot fetch #{entity}" unless entity.respond_to?(:many) and entity.many
-        return create_entity(entity, "id" => id) if id.is_a? Integer
+        raise Travis::Client::Error, "cannot fetch #{entity}" unless entity.respond_to?(:many) and entity.many
+        return create_entity(entity, entity.id_field => id) if entity.id? id
         cached(entity, :by, id) { fetch_one(entity, id) }
       end
 
       def find_many(entity, args = {})
-        raise Travis::Error, "cannot fetch #{entity}" unless entity.respond_to?(:many) and entity.many
+        raise Travis::Client::Error, "cannot fetch #{entity}" unless entity.respond_to?(:many) and entity.many
         cached(entity, :many, args) { fetch_many(entity, args) }
       end
 
       def find_one_or_many(entity, args = nil)
-        raise Travis::Error, "cannot fetch #{entity}" unless entity.respond_to?(:many) and entity.many
+        raise Travis::Client::Error, "cannot fetch #{entity}" unless entity.respond_to?(:many) and entity.many
         cached(entity, :one_or_many, args) do
           path       = "/#{entity.many}"
           path, args = "#{path}/#{args}", {} unless args.is_a? Hash
@@ -122,7 +130,7 @@ module Travis
       end
 
       def config
-        @config ||= get_raw('/config')['config']
+        @config ||= get_raw('/config')['config'] || {}
       end
 
       def load(data)
@@ -142,6 +150,10 @@ module Travis
         load get_raw(*args)
       end
 
+      def delete(*args)
+        load delete_raw(*args)
+      end
+
       def get_raw(*args)
         raw(:get, *args)
       end
@@ -154,8 +166,16 @@ module Travis
         raw(:put, *args)
       end
 
-      def raw(verb, *args)
-        instrumented(verb.to_s.upcase, *args) { connection.public_send(verb, *args).body }
+      def delete_raw(*args)
+        raw(:delete, *args)
+      end
+
+
+      def raw(verb, url, *args)
+        url    = url.sub(/^\//, '')
+        result = instrumented(verb.to_s.upcase, url, *args) { connection.public_send(verb, url, *args) }
+        raise Travis::Client::Error, 'SSL error: could not verify peer' if result.status == 0
+        result.body
       rescue Faraday::Error::ClientError => e
         handle_error(e)
       end
@@ -213,9 +233,9 @@ module Travis
         end
 
         def create_entity(type, data)
-          data   = { "id" => data } if Integer === data or String === data
-          id     = type.cast_id(data.fetch('id'))
-          entity = cached(type, :id, id) { type.new(self, id) }
+          data   = { type.id_field => data } if type.id? data
+          id     = type.cast_id(data.fetch(type.id_field)) unless type.weak?
+          entity = id ? cached(type, :id, id) { type.new(self, id) } : type.new(self, nil)
           entity.update_attributes(data)
           entity
         end

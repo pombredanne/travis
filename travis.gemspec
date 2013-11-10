@@ -2,56 +2,62 @@
 Gem::Specification.new do |s|
   # general infos
   s.name        = "travis"
-  s.version     = "1.5.4"
+  s.version     = "1.6.2"
   s.description = "CLI and Ruby client library for Travis CI"
   s.homepage    = "https://github.com/travis-ci/travis"
   s.summary     = "Travis CI client"
   s.license     = "MIT"
   s.executables = ["travis"]
-  s.extensions  = ["completion/extconf.rb"]
 
   # generated from git shortlog -sn
   s.authors = [
     "Konstantin Haase",
     "Henrik Hodne",
-    "Peter Souter",
-    "Max Barnash",
     "Aaron Hill",
+    "Peter Souter",
+    "Peter van Dijk",
+    "Max Barnash",
     "Mathias Meyer",
-    "Jacob Burkhart",
     "Josh Kalderimis",
     "Justin Lambert",
-    "Adam Lavin",
-    "Benjamin Manns",
+    "Adrien Brault",
+    "Laurent Petit",
+    "Maarten van Vliet",
     "Mario Visic",
+    "Neamar",
     "Piotr Sarnacki",
     "Rapha\xC3\xABl Pinson",
     "Tobias Wilken",
-    "Laurent Petit",
     "Daniel Chatfield",
-    "Adrien Brault"
+    "Adam Lavin",
+    "Benjamin Manns",
+    "Jacob Burkhart"
   ]
 
   # generated from git shortlog -sne
   s.email = [
     "konstantin.mailinglists@googlemail.com",
+    "aa1ronham@gmail.com",
     "me@henrikhodne.com",
     "p.morsou@gmail.com",
+    "henrik@hodne.io",
+    "peter.van.dijk@netherlabs.nl",
     "i.am@anhero.ru",
-    "aa1ronham@gmail.com",
     "meyer@paperplanes.de",
-    "josh.kalderimis@gmail.com",
-    "jlambert@eml.cc",
-    "adrien.brault@gmail.com",
     "adam@lavoaster.co.uk",
-    "chatfielddaniel@gmail.com",
+    "laurent.petit@gmail.com",
+    "benmanns@gmail.com",
     "mario@mariovisic.com",
+    "neamar@neamar.fr",
     "drogus@gmail.com",
     "raphael.pinson@camptocamp.com",
     "tw@cloudcontrol.de",
-    "laurent.petit@gmail.com",
-    "benmanns@gmail.com",
-    "jburkhart@engineyard.com"
+    "maartenvanvliet@gmail.com",
+    "chatfielddaniel@gmail.com",
+    "jburkhart@engineyard.com",
+    "josh.kalderimis@gmail.com",
+    "jlambert@eml.cc",
+    "adrien.brault@gmail.com"
   ]
 
   # generated from git ls-files
@@ -59,17 +65,42 @@ Gem::Specification.new do |s|
     "LICENSE",
     "README.md",
     "Rakefile",
+    "assets/cacert.pem",
+    "assets/init/c.yml",
+    "assets/init/clojure.yml",
+    "assets/init/cpp.yml",
+    "assets/init/erlang.yml",
+    "assets/init/go.yml",
+    "assets/init/groovy.yml",
+    "assets/init/haskell.yml",
+    "assets/init/java.yml",
+    "assets/init/node_js.yml",
+    "assets/init/objective-c.yml",
+    "assets/init/perl.yml",
+    "assets/init/php.yml",
+    "assets/init/python.yml",
+    "assets/init/ruby.yml",
+    "assets/init/scala.yml",
+    "assets/notifications/Travis CI.app/Contents/Info.plist",
+    "assets/notifications/Travis CI.app/Contents/MacOS/Travis CI",
+    "assets/notifications/Travis CI.app/Contents/PkgInfo",
+    "assets/notifications/Travis CI.app/Contents/Resources/Travis CI.icns",
+    "assets/notifications/Travis CI.app/Contents/Resources/en.lproj/Credits.rtf",
+    "assets/notifications/Travis CI.app/Contents/Resources/en.lproj/InfoPlist.strings",
+    "assets/notifications/Travis CI.app/Contents/Resources/en.lproj/MainMenu.nib",
+    "assets/notifications/Travis CI.app/Contents/_CodeSignature/CodeResources",
+    "assets/notifications/Travis CI.app/Contents/embedded.provisionprofile",
+    "assets/notifications/icon.png",
+    "assets/travis.sh",
+    "assets/travis.sh.erb",
     "bin/travis",
-    "completion/extconf.rb",
-    "completion/travis.sh",
-    "completion/travis.sh.erb",
     "example/org_overview.rb",
     "lib/travis.rb",
-    "lib/travis/cacert.pem",
     "lib/travis/cli.rb",
     "lib/travis/cli/accounts.rb",
     "lib/travis/cli/api_command.rb",
     "lib/travis/cli/branches.rb",
+    "lib/travis/cli/cache.rb",
     "lib/travis/cli/cancel.rb",
     "lib/travis/cli/command.rb",
     "lib/travis/cli/console.rb",
@@ -80,22 +111,8 @@ Gem::Specification.new do |s|
     "lib/travis/cli/help.rb",
     "lib/travis/cli/history.rb",
     "lib/travis/cli/init.rb",
-    "lib/travis/cli/init/c.yml",
-    "lib/travis/cli/init/clojure.yml",
-    "lib/travis/cli/init/cpp.yml",
-    "lib/travis/cli/init/erlang.yml",
-    "lib/travis/cli/init/go.yml",
-    "lib/travis/cli/init/groovy.yml",
-    "lib/travis/cli/init/haskell.yml",
-    "lib/travis/cli/init/java.yml",
-    "lib/travis/cli/init/node_js.yml",
-    "lib/travis/cli/init/objective-c.yml",
-    "lib/travis/cli/init/perl.yml",
-    "lib/travis/cli/init/php.yml",
-    "lib/travis/cli/init/python.yml",
-    "lib/travis/cli/init/ruby.yml",
-    "lib/travis/cli/init/scala.yml",
     "lib/travis/cli/login.rb",
+    "lib/travis/cli/logout.rb",
     "lib/travis/cli/logs.rb",
     "lib/travis/cli/monitor.rb",
     "lib/travis/cli/open.rb",
@@ -103,15 +120,20 @@ Gem::Specification.new do |s|
     "lib/travis/cli/pubkey.rb",
     "lib/travis/cli/raw.rb",
     "lib/travis/cli/repo_command.rb",
+    "lib/travis/cli/report.rb",
     "lib/travis/cli/restart.rb",
     "lib/travis/cli/setup.rb",
+    "lib/travis/cli/setup/appfog.rb",
     "lib/travis/cli/setup/cloud_control.rb",
     "lib/travis/cli/setup/cloud_foundry.rb",
     "lib/travis/cli/setup/engine_yard.rb",
     "lib/travis/cli/setup/heroku.rb",
     "lib/travis/cli/setup/nodejitsu.rb",
+    "lib/travis/cli/setup/npm.rb",
     "lib/travis/cli/setup/open_shift.rb",
+    "lib/travis/cli/setup/pypi.rb",
     "lib/travis/cli/setup/ruby_gems.rb",
+    "lib/travis/cli/setup/s3.rb",
     "lib/travis/cli/setup/sauce_connect.rb",
     "lib/travis/cli/setup/service.rb",
     "lib/travis/cli/show.rb",
@@ -126,6 +148,7 @@ Gem::Specification.new do |s|
     "lib/travis/client/artifact.rb",
     "lib/travis/client/broadcast.rb",
     "lib/travis/client/build.rb",
+    "lib/travis/client/cache.rb",
     "lib/travis/client/commit.rb",
     "lib/travis/client/entity.rb",
     "lib/travis/client/error.rb",
@@ -138,8 +161,10 @@ Gem::Specification.new do |s|
     "lib/travis/client/session.rb",
     "lib/travis/client/states.rb",
     "lib/travis/client/user.rb",
-    "lib/travis/client/worker.rb",
+    "lib/travis/client/weak_entity.rb",
     "lib/travis/pro.rb",
+    "lib/travis/tools/assets.rb",
+    "lib/travis/tools/completion.rb",
     "lib/travis/tools/formatter.rb",
     "lib/travis/tools/notification.rb",
     "lib/travis/tools/safe_string.rb",
@@ -172,7 +197,6 @@ Gem::Specification.new do |s|
     "spec/client/repository_spec.rb",
     "spec/client/session_spec.rb",
     "spec/client/user_spec.rb",
-    "spec/client/worker_spec.rb",
     "spec/client_spec.rb",
     "spec/pro_spec.rb",
     "spec/spec_helper.rb",
@@ -193,9 +217,12 @@ Gem::Specification.new do |s|
   s.add_dependency "launchy",               "~> 2.1"
   s.add_dependency "pry",                   "~> 0.9"
   s.add_dependency "typhoeus",              "~> 0.6"
-  s.add_dependency "pusher-client",         "~> 0.3", ">= 0.3.1"
-  s.add_dependency "terminal-notifier",     ">= 1.4.2"
+  s.add_dependency "pusher-client",         "~> 0.4"
+  s.add_dependency "addressable",           "~> 2.3"
   s.add_development_dependency "rspec",     "~> 2.12"
   s.add_development_dependency "sinatra",   "~> 1.3"
   s.add_development_dependency "rack-test", "~> 0.6"
+
+  # Prereleasing on Travis CI
+  s.version = s.version.to_s.succ + ".travis.#{ENV['TRAVIS_JOB_NUMBER']}" if ENV['CI']
 end

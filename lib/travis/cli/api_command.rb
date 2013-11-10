@@ -4,23 +4,26 @@ module Travis
   module CLI
     class ApiCommand < Command
       include Travis::Client::Methods
+      attr_accessor :enterprise_name
       attr_reader :session
       abstract
 
       on('-e', '--api-endpoint URL', 'Travis API server to talk to')
+      on('-I', '--[no-]insecure', 'do not verify SSL certificate of API endpoint')
       on('--pro', "short-cut for --api-endpoint '#{Travis::Client::PRO_URI}'") { |c,_| c.api_endpoint = Travis::Client::PRO_URI }
       on('--org', "short-cut for --api-endpoint '#{Travis::Client::ORG_URI}'") { |c,_| c.api_endpoint = Travis::Client::ORG_URI }
       on('--staging', 'talks to staging system') { |c,_| c.api_endpoint = c.api_endpoint.gsub(/api/, 'api-staging') }
       on('-t', '--token [ACCESS_TOKEN]', 'access token to use') { |c, t| c.access_token = t }
 
       on('--debug', 'show API requests') do |c,_|
+        c.debug = true
         c.session.instrument do |info, request|
-          start = Time.now
-          c.debug(info)
-          request.call
-          duration = Time.now - start
-          c.debug("  took %.2g seconds" % duration)
+          c.time(info, request)
         end
+      end
+
+      on('-X', '--enterprise [NAME]', 'use enterprise setup (optionally takes name for multiple setups)') do |c, name|
+        c.enterprise_name = name || 'default'
       end
 
       on('--adapter ADAPTER', 'Faraday adapter to use for HTTP requests') do |c, adapter|
@@ -41,10 +44,18 @@ module Travis
       end
 
       def setup
+        setup_enterprise
         self.api_endpoint = default_endpoint if default_endpoint and not explicit_api_endpoint?
         self.access_token               ||= fetch_token
         endpoint_config['access_token'] ||= access_token
-        authenticate if pro?
+        endpoint_config['insecure']       = insecure unless insecure.nil?
+        self.insecure                     = endpoint_config['insecure']
+        session.ssl                       = { :verify => false } if insecure?
+        authenticate if pro? or enterprise?
+      end
+
+      def enterprise?
+        !!endpoint_config['enterprise']
       end
 
       def pro?
@@ -80,8 +91,32 @@ module Travis
 
       private
 
+        def setup_enterprise
+          return unless setup_enterprise?
+          c = config['enterprise'] ||= {}
+          c[enterprise_name] = api_endpoint if explicit_api_endpoint?
+          c[enterprise_name] ||= write_to($stderr) do
+            error "enterprise setup not configured" unless interactive?
+            user_input                  = ask(color("Enterprise domain: ", :bold)).to_s
+            domain                      = user_input[%r{^(?:https?://)?(.*?)/?(?:/api/?)?$}, 1]
+            endpoint                    = "https://#{domain}/api"
+            config['default_endpoint']  = endpoint if agree("Use #{color domain, :bold} as default endpoint? ") { |q| q.default = 'yes' }
+            endpoint
+          end
+          self.api_endpoint             = c[enterprise_name]
+          self.insecure                 = true if insecure.nil?
+          endpoint_config['enterprise'] = true
+          @setup_ennterpise             = true
+        end
+
+        def setup_enterprise?
+          @setup_ennterpise ||= false
+          !!enterprise_name and not @setup_ennterpise
+        end
+
         def load_gh
           return if defined? GH
+          debug "Loading gh"
           require 'gh'
 
           gh_config       = session.config['github']
@@ -89,6 +124,11 @@ module Travis
           gh_config     ||= {}
           gh_config[:ssl] = Travis::Client::Session::SSL_OPTIONS
           gh_config[:ssl] = { :verify => false } if gh_config[:api_url] and gh_config[:api_url] != "https://api.github.com"
+
+          gh_config[:instrumenter] = proc do |type, payload, &block|
+            next block.call unless type == 'http.gh'
+            time("GitHub API: #{payload[:verb].to_s.upcase} #{payload[:url]}", block)
+          end if debug?
 
           GH.set(gh_config)
         end
@@ -117,6 +157,13 @@ module Travis
           return ""       if org? and detected_endpoint?
           return " --org" if org?
           return " --pro" if pro?
+
+          if config['enterprise']
+            key, _ = config['enterprise'].detect { |k,v| v.start_with? api_endpoint }
+            return " -X"        if key == "default"
+            return " -X #{key}" if key
+          end
+
           " -e %p" % api_endpoint
         end
 
